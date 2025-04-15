@@ -1,0 +1,213 @@
+---
+title: "translocation analysis survival"
+author: "steph"
+date: "2024-09-19"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+* load packages & read in processed dataset
+* adjust ancestry so that *coastal = 0* and *inland = 1*
+
+```{r}
+library(tidyverse)
+library(NatParksPalettes)
+library(viridis)
+library(ggpubr)
+library(readxl)
+
+theme_set(theme_classic())
+
+#manual change made to CJS output - deleted header lines to allow output to be read into R
+cjs_out<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation.20250410.edit.txt",
+           header=T)
+cjs_out_pemberton<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation_Pemberton.20250410.edit.txt",
+           header=T)
+
+phi<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation.20250410.csv")
+phi_pemberton<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation_Pemberton.20250410.csv")
+
+birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=2)
+pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=3)
+
+birds2<-rbind(pembertonBirds,birds)%>%
+  mutate(ancestry=aims_ancestry*(-1)+1)
+
+birds<-birds%>%
+  mutate(ancestry=aims_ancestry*(-1)+1)
+birds2$capture_gps.n
+write.csv(birds2%>%
+            mutate(capture_gps.n=round(capture_gps.n,3),
+                   capture_gps.w=round(capture_gps.w,3),
+                   release_gps.n=round(release_gps.n,3),
+                   release_gps.w=round(release_gps.w,3))%>%
+            dplyr::select(reference,translocated,release_site,
+                          capture_gps.n,capture_gps.w,release_gps.n,
+                          release_gps.w,release_date),
+          "C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/fig_drafts/TableS1.csv",
+          row.names=F)
+
+```
+
+* Sample sizes for survival analysis
+
+```{r}
+
+knitr::kable(birds2%>%
+               group_by(release_site,release_year)%>%
+               summarise(count=n()))
+
+```
+
+
+### CJS (mark recapture) models
+
+* Fit a CJS model with detections binned into 10 day chunks to create 30 time points (data were too sparse with each day as a time point)
+* Model: Survival ~ release_site + ancestry + release_site x ancestry; Detection ~ time + release_site + ancestry
+* No evidence for the predicted interaction between release site and ancestry
+* None of release site, ancestry, or the interaction between release site and ancestry had a significant effect on survival
+* The direction of the interaction effect was not in the predicted direction - the release site x ancestry interaction is positive, meaning that the relationship between ancestry and survival is more positive for birds released in Squamish relative to those released in Lilloet
+* probability of detection varied among time points, with the higher probabilities of detection occurring during fall and spring migration
+* birds released in Squamish had a higher probability of detection than those released in Lilloet, but detection probability did not vary with ancestry
+* Once you control for difference in detection probability - no difference in survival between release sites
+
+Survival analysis results:
+
+```{r}
+
+knitr::kable(cjs_out%>%filter(startsWith(Factor,"Phi"))%>%
+  mutate_if(is.numeric,round,digits=2)%>%
+    select(-se)%>%
+    rename(Lower_CL=lcl,Upper_CL=ucl))
+
+```
+
+Detection probability analysis results:
+
+(minus variation among time points)
+
+```{r}
+
+knitr::kable(cjs_out%>%filter(startsWith(Factor,"p."))%>%
+               filter(!startsWith(Factor,"p.time"))%>%
+  mutate_if(is.numeric,round,digits=2)%>%
+    select(-se)%>%
+    rename(Lower_CL=lcl,Upper_CL=ucl))
+
+```
+
+### CJS - with Pemberton
+
+* Here, I would expect a flat relationship between ancestry and survival in Pemberton (ie at the centre of the hybrid zone), a positive relationship in Lilloet (better survival of inland birds) and a negative relationship in Squamish (better survival of coastal birds)
+* Model: Survival ~ release_site + ancestry + release_site x ancestry; Detection ~ time + release_site + release_year + ancestry
+* Adding Pemberton birds tagged in 2020 & 2023 does not change anything for the survival results - everything is still null
+* Because release site and release year aren't entirely covarying, I added relase year (alongside time point, release site, and ancestry) as a predictor for detection probability
+* For detection probabilities, the difference seems to be primarily between release years, but also a reduction in Lilloet relative to Pemberton - not sure how much to read into that
+
+Survival analysis results:
+
+```{r}
+
+knitr::kable(cjs_out_pemberton%>%filter(startsWith(Factor,"Phi"))%>%
+  mutate_if(is.numeric,round,digits=2)%>%
+    select(-se)%>%
+    rename(Lower_CL=lcl,Upper_CL=ucl))
+
+```
+
+Detection probability analysis results:
+
+```{r}
+
+knitr::kable(cjs_out_pemberton%>%filter(startsWith(Factor,"p."))%>%
+               filter(!startsWith(Factor,"p.time"))%>%
+  mutate_if(is.numeric,round,digits=2)%>%
+    select(-se)%>%
+    rename(Lower_CL=lcl,Upper_CL=ucl))
+
+```
+
+### Survival figures
+
+* slopes are based on ancestry x release site predictions from the CJS models
+* I think I actually prefer the violin plots because the data are more visible
+
+```{r,fig.width=6,fig.height=3}
+
+ggplot(birds,aes(x=ancestry,y=survival,
+                 group=release_site,
+                 colour=release_site))+
+  #geom_smooth(method="lm",alpha=0.18)+
+  geom_point(size=4,shape=19,alpha=0.8,position=position_jitter(width=0,height=0.1))+
+  geom_line(data=phi,aes(x=ancestry,y=est.adj,colour=release_site),size=1)+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,1)])+
+  xlab("ancestry")+
+  ylab("survival")
+
+
+```
+
+```{r,fig.width=6,fig.height=3}
+
+
+ggplot(birds2,aes(x=ancestry,y=survival,
+                 group=release_site,
+                 colour=release_site))+
+  geom_point(size=4,shape=19,alpha=0.8,position=position_jitter(width=0,height=0.1))+
+  geom_line(data=phi_pemberton,
+            aes(x=ancestry,y=est.adj,colour=release_site),size=1)+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,6,1)])+
+  xlab("ancestry")+
+  ylab("survival")
+
+
+```
+
+
+```{r,fig.width=6,fig.height=4}
+
+gg1<-ggplot(birds2,aes(y=ancestry,x=release_site,
+                 group=interaction(as.factor(survival),release_site),
+                 colour=release_site,shape=as.factor(survival)))+
+  geom_point(size=3,alpha=0.8,
+             position=position_jitterdodge(
+               jitter.width =0.2,jitter.height=0,dodge.width=0.9))+
+  scale_shape_manual(values=c(1,19),name="",labels=c("Not survived","Survived"))+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,7,1)],
+                     guide="none")+
+  geom_violin(fill=NA,aes(group=interaction(survival,release_site)),size=0.8)+
+  ylab("Ancestry")+xlab("Release site")+ylim(0,1)+
+  scale_x_discrete(labels=c("Lillooet","Pemberton","Squamish"))
+  
+gg1
+
+#ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig2.png",
+#       width=6,height=4)
+
+```
+
+* Next, points coloured by model-fitted survival probabilities
+
+```{r,fig.width=5,fig.height=4}
+
+
+ggplot(phi,aes(x=release_site,y=ancestry,colour=est.adj))+
+  geom_jitter(size=4,shape=19,alpha=0.8,width=0.1)+
+  viridis::scale_colour_viridis(option="mako",end=0.9,name="survival\nprobability")
+
+
+```
+
+```{r,fig.width=6,fig.height=4}
+
+
+ggplot(phi_pemberton,aes(x=release_site,y=ancestry,colour=est.adj))+
+  geom_jitter(size=4,shape=19,alpha=0.8,width=0.2)+
+  viridis::scale_colour_viridis(option="mako",end=0.9,name="survival\nprobability")
+
+
+```

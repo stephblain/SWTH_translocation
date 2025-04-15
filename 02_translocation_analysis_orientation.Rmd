@@ -1,0 +1,175 @@
+---
+title: "translocation analysis - orientation"
+author: "steph"
+date: "2024-09-17"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+load packages, read in processed dataset, normalize variables
+
+```{r}
+library(tidyverse)
+library(NatParksPalettes)
+library(viridis)
+library(ggpubr)
+library(readxl)
+library(lme4)
+library(car)
+
+theme_set(theme_classic())
+
+#edit to quantNorm function - remove NAs from estimation
+quantNorm =function(x){
+  x1<-x[!is.na(x)]
+  x[!is.na(x)]<-qnorm(rank(x1,ties.method = "average")/(length(x1)+1))
+  x
+}
+
+
+```
+
+```{r}
+
+
+birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=2)
+pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=3)
+
+
+birds2<-rbind(pembertonBirds,birds)%>%
+  mutate(fall_releaseSite_bearing_tier1=as.numeric(fall_releaseSite_bearing_tier1))%>%
+  mutate(norm_releaseSite_bearing_1=quantNorm(fall_releaseSite_bearing_tier1))%>%
+  mutate(ancestry=aims_ancestry*(-1)+1)
+
+birds<-birds%>%
+  mutate(fall_releaseSite_bearing_tier1=as.numeric(fall_releaseSite_bearing_tier1))%>%
+  mutate(norm_releaseSite_bearing_1=quantNorm(fall_releaseSite_bearing_tier1))%>%
+  mutate(ancestry=aims_ancestry*(-1)+1)
+
+
+```
+
+### Orientations from Lilloet and Squamish
+
+* expect effects of release site (environment), ancestry (genetics), and interaction between release site and environment (genetics x environment)
+* orientation estimated in two ways: relative to the hybrid zone (i.e. Pemberton) and relative to each bird's release location
+
+```{r,fig.width=5,fig.height=3}
+
+ggplot(birds,aes(x=ancestry,y=norm_releaseSite_bearing_1,
+                 group=release_site,
+                 colour=release_site))+
+  geom_smooth(method="lm",alpha=0.18)+
+  geom_point(size=4,shape=19,alpha=0.5)+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,1)],name="Release site")+
+  xlab("Ancestry")+
+  ylab("Orientation to\nrelease site")
+
+```
+
+
+```{r,fig.width=4,fig.height=3}
+
+lm2<-lm(norm_releaseSite_bearing_1~release_site*ancestry,data=birds,
+        na.action=na.exclude)
+anova(lm2)
+summary(lm2)
+emmeans::emmeans(lm2, ~release_site)
+
+p=visreg::visreg(lm2,"release_site",by="ancestry",overlay=T,breaks=c(0.25,0.5,0.75))
+
+gg1<-ggplot(p$fit, aes(release_site, visregFit,
+                  colour=factor(ancestry),group=as.factor(ancestry))) +
+  geom_errorbar(aes(ymin=visregLwr, ymax=visregUpr), alpha=0.5, 
+              linetype=1, size=0.2,width=0.1,position=position_dodge(width=0.2)) +
+  geom_point(position=position_dodge(width=0.2),size=2) +
+  geom_line(position=position_dodge(width=0.2),size=0.8)+
+  scale_color_manual(values=natparks.pals("Banff")[c(1,6,4)],name="migratory\ngenotype")+
+  labs(fill="Weight")+
+  ylab("orientation")+xlab("release site")
+gg1
+
+```
+
+### Comparison to Pemberton birds
+
+* selected birds released in Pemberton in 2020 & 2023
+* bearing shows a negative relationship to ancestry - inland birds fly east, coastal birds fly west
+
+
+```{r,fig.width=9,fig.height=3}
+
+p1<-ggplot(birds,aes(x=ancestry,y=norm_releaseSite_bearing_1,
+                 group=release_site,
+                 colour=release_site))+
+  geom_smooth(method="lm",alpha=0.18)+
+  geom_point(size=4,shape=19,alpha=0.5)+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,1)],name="Release site")+
+  xlab("Ancestry")+
+  ylab("Orientation")
+
+p2<-ggplot(birds2,aes(x=ancestry,y=norm_releaseSite_bearing_1,
+                 group=release_site,
+                 colour=release_site))+
+  geom_smooth(method="lm",alpha=0.18)+
+  geom_point(size=4,shape=19,alpha=0.5)+
+  scale_color_manual(values=natparks.pals("Banff")[c(4,7,1)],name="Release site")+
+  xlab("Ancestry")+
+  ylab("Orientation")
+
+ggarrange(p1,p2,labels=LETTERS)
+
+#ggsave("C:/Users/Steph/TAMU_OneDrive//Thrushes/translocation/FigS1.png",
+#       width=9,height=3)
+
+```
+
+
+* include year as a random effect, to control for similarities among 2020 vs 2023 birds
+* here, release site is unimportant, but ancestry is significant and there is an interaction between release site and ancestry
+* again, more positive slopes between release site and ancestry in Lilloet and Squamish than Pemberton
+
+```{r,fig.width=5,fig.height=4}
+
+birds2<-birds2%>%mutate(f_release_year=as.factor(release_year))%>%
+  mutate(f_release_site=factor(release_site,levels=c("Squamish","Pemberton","Lilloet")))
+
+lmer2<-lmer(norm_releaseSite_bearing_1~f_release_site*ancestry+(1|f_release_year),
+            data=birds2,na.action=na.exclude)
+Anova(lmer2)
+
+coef(lmer2)
+summary(lmer2)
+
+data.frame(Anova(lmer2))%>%
+  mutate()
+```
+
+```{r,fig.width=5.5,fig.height=4}
+
+
+p=visreg::visreg(lmer2,"f_release_site",by="ancestry",overlay=T,breaks=c(0.25,0.5,0.75))
+
+gg1<-ggplot(p$fit, aes(f_release_site,
+                  visregFit,
+                  colour=factor(ancestry),group=as.factor(ancestry))) +
+  geom_errorbar(aes(ymin=visregLwr, ymax=visregUpr), 
+              linetype=1, size=0.6,width=0.1,position=position_dodge(width=0.2)) +
+  geom_point(position=position_dodge(width=0.2),size=3) +
+  geom_line(position=position_dodge(width=0.2),size=1)+
+  scale_color_manual(values=natparks.pals("Banff")[c(1,7,5)],name="Ancestry",
+                     labels=c("Coastal backcross","Hybrid","Inland backcross"))+
+  labs(fill="Weight")+
+  ylab("Orientation")+xlab("Release site")
+
+gg1
+#ggsave(plot=gg1,
+#       file="C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig3B.png",
+#       width=5.5,height=4)
+
+```
+
