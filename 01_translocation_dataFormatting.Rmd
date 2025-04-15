@@ -247,7 +247,9 @@ lat.df.birds.fall1.summary<-
 lat.df.birds.fall1<-lat.df.birds.fall1%>%
   left_join(rbind(birds%>%select(name_in_vcf,fall_releaseSite_bearing_tier1),
                   pembertonBirds%>%select(name_in_vcf,fall_releaseSite_bearing_tier1)))
+```
 
+```{r, fig.height=3,fig.width=4}
 ggplot(lat.df.birds.fall1,aes(x=ancestry))+
   geom_histogram()
 
