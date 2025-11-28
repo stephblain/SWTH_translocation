@@ -1,7 +1,7 @@
 ---
 title: "translocation analysis - format data"
-author: "steph"
-date: "2024-09-04"
+author: ""
+date: "2025-09-30"
 output: pdf_document
 ---
 
@@ -20,6 +20,7 @@ library(NatParksPalettes)
 library(viridis)
 library(ggpubr)
 library(sf)
+library(scico)
 library(rnaturalearth)
 library(geosphere)
 library(readxl)
@@ -30,9 +31,9 @@ theme_set(theme_classic())
 * create a merged metadata df
 
 ```{r}
-lat.df<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=5)
-birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=2)
-pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=3)
+lat.df<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=5)
+birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=2)
+pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=3)
 meta_thrush<-rbind(birds,pembertonBirds)
 
 ```
@@ -42,7 +43,7 @@ meta_thrush<-rbind(birds,pembertonBirds)
 poly.all<-data.frame(X.co=rep(c(0,0.5,1)), #make triangle polygon for plotting
                      Y.co=rep(c(0,1,0)))
 
-ggplot(birds,aes(x=aims_ancestry,y=aims_heterozygosity,colour=as.character(survival)))+
+ggplot(birds,aes(x=hiest_ancestry,y=hiest_heterozygosity,colour=as.character(survival)))+
   geom_polygon(data=poly.all,aes(x=X.co,y=Y.co),fill=NA,colour="grey30")+
   geom_point(size=4,shape=19,alpha=0.7)+
   scale_color_manual(values=natparks.pals("Arches2")[c(4,1)],name='survival')+
@@ -88,7 +89,7 @@ ch.df.pemberton<-ch.df%>%filter(name_in_vcf%in%pembertonBirds$name_in_vcf)
 ch.df<-ch.df%>%filter(name_in_vcf%in%birds$name_in_vcf)%>%
   left_join(birds)%>%
   mutate(ch=paste("days",ch,sep="_"))%>% #stops capture history from being saved as a very large number
-  select(name_in_vcf,motustagid,aims_ancestry,release_site,sex_binary,ch)
+  select(name_in_vcf,motustagid,hiest_ancestry,release_site,sex_binary,ch)
 
 #check that number of characters in detection history matches expectation for sets of 10 days
 nchar(ch.df$ch[1])==(300+5)
@@ -116,7 +117,7 @@ ch2<-ch2%>%unite(ch,-name_in_vcf,sep="")
 
 ch2<-ch2%>%left_join(birds)%>%
   mutate(ch=paste("days",ch,sep="_"))%>% #stops capture history from being saved as a very large number
-  select(name_in_vcf,motustagid,aims_ancestry,release_site,release_year,sex_binary,ch)
+  select(name_in_vcf,motustagid,hiest_ancestry,release_site,release_year,sex_binary,ch)
 # write.csv(ch2,
 #           paste("C:/Users/Steph/GitHub_data/translocation/survival.translocatedBirds.ch_10days",today,"csv",sep=".")
 #           )
@@ -138,7 +139,7 @@ ch2<-ch2%>%unite(ch,-name_in_vcf,sep="")
 
 ch2<-ch2%>%left_join(pembertonBirds)%>%
   mutate(ch=paste("days",ch,sep="_"))%>% #stops capture history from being saved as a very large number
-  select(name_in_vcf,motustagid,aims_ancestry,release_site,release_year,sex_binary,ch)
+  select(name_in_vcf,motustagid,hiest_ancestry,release_site,release_year,sex_binary,ch)
 
 #check that number of characters in detection history matches expectation for sets of 10 days
 nchar(ch2$ch[1])==(300/10+5)
@@ -154,36 +155,42 @@ nchar(ch2$ch[1])==(300/10+5)
 
 ```{r,fig.width=10,fig.height=3}
 
+#select individuals
 lat.df.birds<-lat.df%>%filter(name_in_vcf%in%c(birds$name_in_vcf,pembertonBirds$name_in_vcf))
+
 #load map data
 world <- ne_countries(scale = "medium", returnclass = "sf")
 
+#set release site factors and flip ancestry estimates so inland=1
 lat.df.birds$release_site<-factor(lat.df.birds$release_site,levels=c("Squamish","Pemberton","Lilloet"))
-lat.df.birds<-lat.df.birds%>%left_join(meta_thrush%>%dplyr::select(name_in_vcf,aims_ancestry))
-lat.df.birds$ancestry<-lat.df.birds$aims_ancestry*(-1)+1
+lat.df.birds<-lat.df.birds%>%left_join(meta_thrush%>%dplyr::select(name_in_vcf,hiest_ancestry))
+lat.df.birds$ancestry<-lat.df.birds$hiest_ancestry*(-1)+1
+
+#get unique detections
+lat.df.birds<-lat.df.birds%>%
+  select(recvDeployLon,recvDeployLat,name_in_vcf,ancestry,release_site,
+         deployDay,deploydoy,detectdoy,detectyear,detectmonth,tagDays)%>%
+  distinct()
 
 map1<-ggplot() +
   geom_sf(data = world,fill="grey90",colour=NA)+
   geom_path(data=lat.df.birds,aes(x=recvDeployLon,y=recvDeployLat,
-                                  group=name_in_vcf,colour=ancestry),size=0.3,alpha=0.4)+
-  #scale_colour_manual(values=natparks.pals("Banff")[c(4,1)])+
-  geom_point(data=lat.df.birds,aes(x=recvDeployLon,y=recvDeployLat,
-                                colour=ancestry,group=name_in_vcf),size=1.2)+
-  #scale_shape_manual(values=c(19,15,17))+
-  #scale_colour_gradientn(colours=c(natparks.pals("Banff")[4],"grey10",natparks.pals("Banff")[1]),
-  #                       name="ancestry",values=c(0,0.5,1))+
+                                  group=name_in_vcf,colour=ancestry),size=0.1,alpha=0.4)+
   
-  scale_colour_gradientn(colours=natparks.pals("Banff")[c(1,7,4)],
-                         name="Ancestry",values=c(0,0.5,1))+
+  geom_point(data=lat.df.birds,aes(x=recvDeployLon,y=recvDeployLat,
+                                colour=ancestry,group=name_in_vcf),size=1)+
+  
+  scale_colour_scico(palette="navia",name="Ancestry",end=0.9,limits=c(0,1))+
+  
   xlab("Longitude")+ylab("Latitude")+
-  #theme(legend.position="none")+
-  ylim(0,66)+xlim(-162,-55)+
+  ylim(5,55)+xlim(-130,-70)+
   facet_wrap(vars(release_site))
 
 map1
 
-ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig4.png",
-       width=10,height=3)
+
+ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig4.svg",
+       plot=map1,width=10,height=3)
 
 ```
 
@@ -225,7 +232,7 @@ lat.df.birds.fall1<-lat.df.birds.fall1%>%
     arrange(tagDays)%>%filter(!duplicated(motustagid))%>%
   mutate(motustagid=as.character(motustagid))%>%
   left_join(meta_thrush)%>%
-  mutate(ancestry=aims_ancestry*(-1)+1)%>%
+  mutate(ancestry=hiest_ancestry*(-1)+1)%>%
   mutate(release_site=factor(release_site,levels=c("Squamish","Pemberton","Lilloet")))
 
 lat.df.birds.fall1.summary<-lat.df.birds.fall1%>%
@@ -282,8 +289,10 @@ ggplot() +
 
 
 ```{r, fig.width=8,fig.height=3}
-ggplot() +
-  geom_sf(data = world,fill="grey95",colour="grey80")+
+
+library(wesanderson)
+gg3c<-ggplot() +
+  geom_sf(data = world,fill="grey99",colour="grey80")+
   geom_path(data=lat.df.birds.fall1.summary,
             aes(x=longitude,y=latitude,
                 group=name_in_vcf,colour=ancestry),size=0.5,alpha=0.8)+
@@ -294,20 +303,22 @@ ggplot() +
   #scale_colour_gradientn(colours=c(natparks.pals("Banff")[4],"grey10",natparks.pals("Banff")[1]),
   #                       name="ancestry",values=c(0,0.5,1))+
   
-  scale_colour_gradientn(colours=natparks.pals("Banff")[c(1,7,4)],
-                         name="Ancestry",values=c(0,0.5,1))+
+  scale_colour_scico(palette="navia",name="Ancestry",end=0.9,limits=c(0,1))+
   xlab("Longitude")+ylab("Latitude")+
   #theme(legend.position="none")+
   ylim(48,51.5)+xlim(-126,-118)+
   facet_wrap(vars(release_site))
 
+gg3c
 
 
-ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig3C.png",
-       width=8,height=3)
+ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig3C.svg",
+       plot=gg3c,width=8,height=3)
 
 ```
-verify that estimated bearings match where the birds are going
+
+
+* verify that estimated bearings match where the birds are going
 
 
 ```{r, fig.width=8,fig.height=3}

@@ -1,7 +1,7 @@
 ---
 title: "translocation analysis survival"
-author: "steph"
-date: "2024-09-19"
+author: ""
+date: "2025-09-30"
 output: pdf_document
 ---
 
@@ -19,37 +19,73 @@ library(NatParksPalettes)
 library(viridis)
 library(ggpubr)
 library(readxl)
+library(scico)
 
 theme_set(theme_classic())
 
 #manual change made to CJS output - deleted header lines to allow output to be read into R
-cjs_out<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation.20250410.edit.txt",
+cjs_out<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation.20250914.edit.txt",
            header=T)
-cjs_out_pemberton<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation_Pemberton.20250410.edit.txt",
+cjs_out_pemberton<-read.table("C:/Users/Steph/GitHub_data/translocation/CJS.beta.translocation_Pemberton.20250914.edit.txt",
            header=T)
 
-phi<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation.20250410.csv")
-phi_pemberton<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation_Pemberton.20250410.csv")
+phi<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation.20250914.csv")
+phi_pemberton<-read.csv("C:/Users/Steph/GitHub_data/translocation/CJS.fit.phi.translocation_Pemberton.20250914.csv")
 
-birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=2)
-pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=3)
+birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=2)
+pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=3)
 
 birds2<-rbind(pembertonBirds,birds)%>%
-  mutate(ancestry=aims_ancestry*(-1)+1)
+  mutate(ancestry=hiest_ancestry*(-1)+1)
 
 birds<-birds%>%
-  mutate(ancestry=aims_ancestry*(-1)+1)
-birds2$capture_gps.n
-write.csv(birds2%>%
-            mutate(capture_gps.n=round(capture_gps.n,3),
-                   capture_gps.w=round(capture_gps.w,3),
-                   release_gps.n=round(release_gps.n,3),
-                   release_gps.w=round(release_gps.w,3))%>%
-            dplyr::select(reference,translocated,release_site,
-                          capture_gps.n,capture_gps.w,release_gps.n,
-                          release_gps.w,release_date),
-          "C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/fig_drafts/TableS1.csv",
-          row.names=F)
+  mutate(ancestry=hiest_ancestry*(-1)+1)
+
+```
+
+```{r}
+
+tabS1<-birds2%>%
+  mutate(ancestry=round(ancestry,3),
+    capture_gps.n=round(capture_gps.n,3),
+    capture_gps.w=round(capture_gps.w,3),
+    release_gps.n=round(release_gps.n,3),
+    release_gps.w=round(release_gps.w,3),
+    release_site=if_else(release_site=="Lilloet","Lillooet",release_site))%>%
+  dplyr::select(reference,translocated,ancestry,release_site,
+    capture_gps.n,capture_gps.w,release_gps.n,
+    release_gps.w,release_date)
+#tabS1
+#write_csv(tabS1,
+#         "C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/fig_drafts/TableS1.csv")
+
+rm(tabS1)
+
+```
+
+
+```{r}
+
+
+
+poly.all<-data.frame(X.co=rep(c(0,0.5,1)), #make triangle polygon for plotting
+                     Y.co=rep(c(0,1,0)))
+
+figTri<-ggplot(birds2%>%mutate(release_site=if_else(release_site=="Lilloet","Lillooet",release_site)),
+       aes(x=ancestry,y=hiest_heterozygosity,colour=release_site))+
+  geom_polygon(data=poly.all,aes(x=X.co,y=Y.co),fill=NA,colour="grey30")+
+  geom_point(size=4,shape=19,alpha=0.7)+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8),
+                     guide="none")+
+  coord_equal()+
+  xlim(0,1)+ylim(0,1)+
+  facet_wrap(vars(release_site))+
+  xlab("Ancestry - coastal to inland")+
+  ylab("Interspecific heterozygosity")
+figTri
+ggsave(plot=figTri,
+       "C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/FigS_tri.png",
+       width=6,height=3)
 
 ```
 
@@ -70,7 +106,6 @@ knitr::kable(birds2%>%
 * Model: Survival ~ release_site + ancestry + release_site x ancestry; Detection ~ time + release_site + ancestry
 * No evidence for the predicted interaction between release site and ancestry
 * None of release site, ancestry, or the interaction between release site and ancestry had a significant effect on survival
-* The direction of the interaction effect was not in the predicted direction - the release site x ancestry interaction is positive, meaning that the relationship between ancestry and survival is more positive for birds released in Squamish relative to those released in Lilloet
 * probability of detection varied among time points, with the higher probabilities of detection occurring during fall and spring migration
 * birds released in Squamish had a higher probability of detection than those released in Lilloet, but detection probability did not vary with ancestry
 * Once you control for difference in detection probability - no difference in survival between release sites
@@ -106,7 +141,6 @@ knitr::kable(cjs_out%>%filter(startsWith(Factor,"p."))%>%
 * Model: Survival ~ release_site + ancestry + release_site x ancestry; Detection ~ time + release_site + release_year + ancestry
 * Adding Pemberton birds tagged in 2020 & 2023 does not change anything for the survival results - everything is still null
 * Because release site and release year aren't entirely covarying, I added relase year (alongside time point, release site, and ancestry) as a predictor for detection probability
-* For detection probabilities, the difference seems to be primarily between release years, but also a reduction in Lilloet relative to Pemberton - not sure how much to read into that
 
 Survival analysis results:
 
@@ -131,6 +165,29 @@ knitr::kable(cjs_out_pemberton%>%filter(startsWith(Factor,"p."))%>%
 
 ```
 
+```{r}
+
+library(lme4)
+library(car)
+
+glm1<-glm(survival~ancestry*release_site,
+      family = binomial(link="logit"),
+      data=birds)
+
+summary(glm1)
+Anova(glm1)
+
+glmm1<-glmer(survival~ancestry*release_site+(1|release_year),
+      family = binomial(link="logit"),
+      data=birds2)
+
+summary(glmm1)
+Anova(glmm1)
+
+
+
+```
+
 ### Survival figures
 
 * slopes are based on ancestry x release site predictions from the CJS models
@@ -144,7 +201,7 @@ ggplot(birds,aes(x=ancestry,y=survival,
   #geom_smooth(method="lm",alpha=0.18)+
   geom_point(size=4,shape=19,alpha=0.8,position=position_jitter(width=0,height=0.1))+
   geom_line(data=phi,aes(x=ancestry,y=est.adj,colour=release_site),size=1)+
-  scale_color_manual(values=natparks.pals("Banff")[c(4,1)])+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8)[c(3,1)])+
   xlab("ancestry")+
   ylab("survival")
 
@@ -167,8 +224,14 @@ ggplot(birds2,aes(x=ancestry,y=survival,
 
 ```
 
+```{r}
+
+birds2$release_site<-factor(birds2$release_site,levels=c("Squamish","Pemberton","Lilloet"))
+
+```
 
 ```{r,fig.width=6,fig.height=4}
+
 
 gg1<-ggplot(birds2,aes(y=ancestry,x=release_site,
                  group=interaction(as.factor(survival),release_site),
@@ -177,16 +240,16 @@ gg1<-ggplot(birds2,aes(y=ancestry,x=release_site,
              position=position_jitterdodge(
                jitter.width =0.2,jitter.height=0,dodge.width=0.9))+
   scale_shape_manual(values=c(1,19),name="",labels=c("Not survived","Survived"))+
-  scale_color_manual(values=natparks.pals("Banff")[c(4,7,1)],
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8),
                      guide="none")+
   geom_violin(fill=NA,aes(group=interaction(survival,release_site)),size=0.8)+
   ylab("Ancestry")+xlab("Release site")+ylim(0,1)+
-  scale_x_discrete(labels=c("Lillooet","Pemberton","Squamish"))
+  scale_x_discrete(labels=c("Squamish","Pemberton","Lillooet"))
   
 gg1
 
-#ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig2.png",
-#       width=6,height=4)
+#ggsave("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig2.svg",
+#       plot=gg1,width=6,height=4)
 
 ```
 

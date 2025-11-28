@@ -1,7 +1,7 @@
 ---
 title: "translocation analysis - orientation"
-author: "steph"
-date: "2024-09-17"
+author: ""
+date: "2025-09-30"
 output: pdf_document
 ---
 
@@ -14,7 +14,8 @@ load packages, read in processed dataset, normalize variables
 
 ```{r}
 library(tidyverse)
-library(NatParksPalettes)
+#library(NatParksPalettes)
+library(scico)
 library(viridis)
 library(ggpubr)
 library(readxl)
@@ -36,19 +37,19 @@ quantNorm =function(x){
 ```{r}
 
 
-birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=2)
-pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data.xlsx",sheet=3)
+birds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=2)
+pembertonBirds<-read_xlsx("C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/data_archiving/translocation_data_revision.xlsx",sheet=3)
 
 
 birds2<-rbind(pembertonBirds,birds)%>%
   mutate(fall_releaseSite_bearing_tier1=as.numeric(fall_releaseSite_bearing_tier1))%>%
   mutate(norm_releaseSite_bearing_1=quantNorm(fall_releaseSite_bearing_tier1))%>%
-  mutate(ancestry=aims_ancestry*(-1)+1)
+  mutate(ancestry=hiest_ancestry*(-1)+1)
 
 birds<-birds%>%
   mutate(fall_releaseSite_bearing_tier1=as.numeric(fall_releaseSite_bearing_tier1))%>%
   mutate(norm_releaseSite_bearing_1=quantNorm(fall_releaseSite_bearing_tier1))%>%
-  mutate(ancestry=aims_ancestry*(-1)+1)
+  mutate(ancestry=hiest_ancestry*(-1)+1)
 
 
 ```
@@ -65,7 +66,7 @@ ggplot(birds,aes(x=ancestry,y=norm_releaseSite_bearing_1,
                  colour=release_site))+
   geom_smooth(method="lm",alpha=0.18)+
   geom_point(size=4,shape=19,alpha=0.5)+
-  scale_color_manual(values=natparks.pals("Banff")[c(4,1)],name="Release site")+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8)[c(3,1)],name="Release site")+
   xlab("Ancestry")+
   ylab("Orientation to\nrelease site")
 
@@ -88,7 +89,7 @@ gg1<-ggplot(p$fit, aes(release_site, visregFit,
               linetype=1, size=0.2,width=0.1,position=position_dodge(width=0.2)) +
   geom_point(position=position_dodge(width=0.2),size=2) +
   geom_line(position=position_dodge(width=0.2),size=0.8)+
-  scale_color_manual(values=natparks.pals("Banff")[c(1,6,4)],name="migratory\ngenotype")+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8,direction=-1),name="migratory\ngenotype")+
   labs(fill="Weight")+
   ylab("orientation")+xlab("release site")
 gg1
@@ -105,19 +106,21 @@ gg1
 
 p1<-ggplot(birds,aes(x=ancestry,y=norm_releaseSite_bearing_1,
                  group=release_site,
-                 colour=release_site))+
-  geom_smooth(method="lm",alpha=0.18)+
-  geom_point(size=4,shape=19,alpha=0.5)+
-  scale_color_manual(values=natparks.pals("Banff")[c(4,1)],name="Release site")+
+                 colour=release_site,fill=release_site))+
+  geom_point(size=2,shape=19,alpha=0.7)+
+  geom_smooth(method="lm",alpha=0.1)+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8,direction=-1),name="Release site")+
+  scale_fill_manual(values=scico(n=3,palette='navia',end=0.8,direction=-1),name="Release site")+
   xlab("Ancestry")+
   ylab("Orientation")
 
 p2<-ggplot(birds2,aes(x=ancestry,y=norm_releaseSite_bearing_1,
                  group=release_site,
-                 colour=release_site))+
-  geom_smooth(method="lm",alpha=0.18)+
-  geom_point(size=4,shape=19,alpha=0.5)+
-  scale_color_manual(values=natparks.pals("Banff")[c(4,7,1)],name="Release site")+
+                 colour=release_site,fill=release_site))+
+  geom_point(size=2,shape=19,alpha=0.7)+
+  geom_smooth(method="lm",alpha=0.1)+
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8,direction=-1),name="Release site")+
+  scale_fill_manual(values=scico(n=3,palette='navia',end=0.8,direction=-1),name="Release site")+
   xlab("Ancestry")+
   ylab("Orientation")
 
@@ -149,6 +152,25 @@ data.frame(Anova(lmer2))%>%
   mutate()
 ```
 
+```{r}
+
+
+lm2b<-lm(norm_releaseSite_bearing_1~f_release_year+f_release_site*ancestry,
+            data=birds2,na.action=na.exclude)
+Anova(lm2b)
+
+```
+
+```{r}
+
+
+lm2c<-lm(norm_releaseSite_bearing_1~f_release_year*ancestry,
+            data=birds2%>%filter(release_site=="Pemberton"),
+         na.action=na.exclude)
+Anova(lm2c)
+
+```
+
 ```{r,fig.width=5.5,fig.height=4}
 
 
@@ -161,14 +183,13 @@ gg1<-ggplot(p$fit, aes(f_release_site,
               linetype=1, size=0.6,width=0.1,position=position_dodge(width=0.2)) +
   geom_point(position=position_dodge(width=0.2),size=3) +
   geom_line(position=position_dodge(width=0.2),size=1)+
-  scale_color_manual(values=natparks.pals("Banff")[c(1,7,5)],name="Ancestry",
+  scale_color_manual(values=scico(n=3,palette='navia',end=0.8),name="Ancestry",
                      labels=c("Coastal backcross","Hybrid","Inland backcross"))+
   labs(fill="Weight")+
   ylab("Orientation")+xlab("Release site")
-
 gg1
 #ggsave(plot=gg1,
-#       file="C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig3B.png",
+#       file="C:/Users/Steph/TAMU_OneDrive/Thrushes/translocation/Fig3B.svg",
 #       width=5.5,height=4)
 
 ```
